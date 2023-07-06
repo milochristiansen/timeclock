@@ -159,7 +159,7 @@ This will act just like the input was being used to specify a new event, but it 
 
 ## Timelog Format
 
-The timelog is stored on disk in a plain text format lightly inspired by (Ledger CLI)[https://ledger-cli.org/]. Each
+The timelog is stored on disk in a plain text format lightly inspired by [Ledger CLI](https://ledger-cli.org/). Each
 event is stored on a single line in the following format:
 
 	yyy/mm/dd hh:mmPM [timecode] description
