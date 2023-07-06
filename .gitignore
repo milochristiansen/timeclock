@@ -1,0 +1,6 @@
+
+# App binary
+timeclock
+
+# Build script that dumps the result in my private bin directory.
+build
