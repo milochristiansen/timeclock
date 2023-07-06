@@ -55,6 +55,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "    that have a non-blank timecode.")
 		fmt.Fprintln(os.Stderr, "'info'")
 		fmt.Fprintln(os.Stderr, "    List all known time codes.")
+		fmt.Fprintln(os.Stderr, "'test'")
+		fmt.Fprintln(os.Stderr, "    Process all following input as if you were creating an event, but don't")
+		fmt.Fprintln(os.Stderr, "    actually write anything to the timelog.")
 		fmt.Fprintln(os.Stderr, "No command word.")
 		fmt.Fprintln(os.Stderr, "    Create a new event. The entire command line is used to define the event.")
 		fmt.Fprintln(os.Stderr, "    To be valid, all that is required is a time. If the time and/or time code")
@@ -154,7 +157,7 @@ func main() {
 	// Fix times
 	case os.Args[1] == "time":
 		if last == nil {
-			fmt.Fprintln(os.Stderr, "No events found to edit.")
+			fmt.Fprintln(os.Stderr, "No events found.")
 			os.Exit(1)
 		}
 
@@ -164,7 +167,7 @@ func main() {
 	// Fix time codes
 	case os.Args[1] == "code":
 		if last == nil {
-			fmt.Fprintln(os.Stderr, "No events found to edit.")
+			fmt.Fprintln(os.Stderr, "No events found.")
 			os.Exit(1)
 		}
 
@@ -176,7 +179,7 @@ func main() {
 		fallthrough
 	case os.Args[1] == "note":
 		if last == nil {
-			fmt.Fprintln(os.Stderr, "No events found to edit.")
+			fmt.Fprintln(os.Stderr, "No events found.")
 			os.Exit(1)
 		}
 
@@ -186,11 +189,33 @@ func main() {
 	// Handle the current state report.
 	case os.Args[1] == "status":
 		if last == nil {
-			fmt.Println("No events.")
-			return
+			fmt.Fprintln(os.Stderr, "No events found.")
+			os.Exit(1)
 		}
 
 		fmt.Println(last.String())
+		return
+
+	// Test input handling.
+	case os.Args[1] == "test":
+		if len(os.Args) <= 2 {
+			fmt.Fprintln(os.Stderr, "Not enough arguments.")
+			os.Exit(1)
+		}
+
+		t, c, d := ParseLine(os.Args[2:], codes)
+		last = &timelog.Event{
+			At:   t,
+			Code: c,
+			Desc: d,
+		}
+		fmt.Printf("%s\n", last.String())
+		if c == "" {
+			fmt.Fprintln(os.Stderr, "No time code found, use 'code' to specify one.")
+		}
+		if d == "" {
+			fmt.Fprintln(os.Stderr, "No description found, use 'note' to specify one.")
+		}
 		return
 
 	// Handle the default clock in/out action
@@ -211,9 +236,9 @@ func main() {
 		log = append(log, last)
 
 		if old != nil {
-			fmt.Fprintf(os.Stderr, "%s\n == %.1fh ==>\n", old.String(), last.At.Sub(old.At).Hours())
+			fmt.Printf("%s\n == %.1fh ==>\n", old.String(), last.At.Sub(old.At).Hours())
 		}
-		fmt.Fprintf(os.Stderr, "%s\n", last.String())
+		fmt.Printf("%s\n", last.String())
 		if c == "" {
 			fmt.Fprintln(os.Stderr, "No time code found, use 'code' to specify one.")
 		}
