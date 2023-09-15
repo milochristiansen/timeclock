@@ -11,26 +11,23 @@ feed in will be a valid input, and if it isn't what you meant... Well, there are
 
 ## Configuration
 
-Currently, there isn't any. The timelog is written to `${HOME}/Sync/time.log`.
+Config is read from `$XDG_CONFIG_HOME/sctime`, if `$XDG_CONFIG_HOME` is empty or unset `$HOME/.config/sctime` is used.
 
-Yes, I plan to change this somehow, but who knows when, how, or if ever. I like the simplicity of the current system,
-but it is a bit fragile and specific to my setup. There isn't anything useful to put in a config file (oh look, another
-hardcoded path!), the design of the program doesn't lend itself to a command line argument, and a more generic hardcoded
-path would only make the problem less obvious.
+Inside this directory there should be a file named `config.ini`. The default contents of this file are as follows:
 
-For now, edit the path to taste (it is right at the top of `main`) before you compile.
+	logfile="$HOME/sctime.log"
+	codefile="$CONFIG/codes.txt"
+
+`$CONFIG` is a special variable set to the current configuration directory. Otherwise, you may use any environment
+variable you like.
+
+`logfile` is the path to your timelog.
+`codefile` is the path to a file containing all of your timecodes, one per line.
 
 
 ## Building
 
-Due to the total lack of configuration that isn't editing `main.go`, I suggest first downloading the repo somewhere
-using any of the normal methods you would use to get a git repo from github.
-
-Once you have edited the timelog path to taste, just
-
-	go build
-
-and move the resulting binary to somewhere that is on your path.
+	go install github.com/milochristiansen/timeclock
 
 You will, of course, need to have the latest Go complier installed.
 

@@ -23,16 +23,30 @@ misrepresented as being the original software.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/markusmobius/go-dateparser"
 
 	"github.com/milochristiansen/timeclock/timelog"
 )
+
+// Exit Codes:
+// 0: OK
+// 1: General error
+// 2: Invalid argument count
+//
+// 5: Invalid environment
+// 6: Could not find/read config file
+// 7: Could not find/read timecode file
+// 8: Could not find/read timelog file
 
 func main() {
 	if len(os.Args) < 2 {
@@ -43,6 +57,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "   Edit last event time, provide a time as an argument.")
 		fmt.Fprintln(os.Stderr, "'code'")
 		fmt.Fprintln(os.Stderr, "    Edit last event time code, provide new code as an argument.")
+		fmt.Fprintln(os.Stderr, "    Timecodes may not contain spaces!")
 		fmt.Fprintln(os.Stderr, "'desc' or 'note'")
 		fmt.Fprintln(os.Stderr, "    Edit last event description, provide new description as an argument.")
 		fmt.Fprintln(os.Stderr, "'status'")
@@ -66,33 +81,97 @@ func main() {
 		fmt.Fprintln(os.Stderr, "    the main body of the text, then the whole text is used unmodified. Time")
 		fmt.Fprintln(os.Stderr, "    codes are defined by matching existing codes in the log. To define a new")
 		fmt.Fprintln(os.Stderr, "    code, create the event, then set the code with 'code'.")
-		os.Exit(1)
+		os.Exit(2)
 	}
 
-	sheetP := os.ExpandEnv("${HOME}/Sync/time.log")
+	// Find/create the configuration directory.
+	configdir, ok := os.LookupEnv("XDG_CONFIG_HOME")
+	if !ok || configdir == "" {
+		home, ok := os.LookupEnv("HOME")
+		if !ok || home == "" {
+			fmt.Fprintln(os.Stderr, "Both XDG_CONFIG_HOME and HOME do not exist or are invalid.")
+			os.Exit(5)
+		}
+
+		configdir = home + "/.config"
+	}
+	configdir += "/sctime"
+
+	err := os.MkdirAll(configdir, 0777)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error ensuring existence of config directory:")
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(6)
+	}
+
+	// Load the config file
+	config := map[string]string{
+		"logfile": "$HOME/sctime.log",
+		"codefile": "$CONFIG/codes.txt",
+	}
+
+	configraw, err := ioutil.ReadFile(configdir + "/config.ini")
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(os.Stderr, "Config file does not exist, writing defaults.")
+		file, err := os.Create(configdir + "/config.ini")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error opening config file for writing:")
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(6)
+		}
+		for k, v := range config {
+			fmt.Fprintln(file, k + "=" + v)
+		}
+		file.Close()
+		os.Exit(6)
+	} else if err != nil {
+		fmt.Fprintln(os.Stderr, "Error reading config file:")
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(6)
+	}
+
+	ParseINI(string(configraw), config)
+
+	for k := range config {
+		config[k] = os.Expand(config[k], func(s string) string {
+			if s == "CONFIG" {
+				return configdir
+			}
+			return os.Getenv(s)
+		})
+	}
+
+	// Load timecodes
+	codesraw, err := ioutil.ReadFile(config["codefile"])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error reading timecode file:")
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(7)
+	}
+	codes := strings.Split(string(codesraw), "\n")
+
+	// Now on to our regularly scheduled program
 
 	// Open the timesheet
-	sheetF, err := os.OpenFile(sheetP, os.O_RDWR | os.O_CREATE, 0644)
+	sheetF, err := os.OpenFile(config["logfile"], os.O_RDWR | os.O_CREATE, 0644)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(8)
 	}
 	defer sheetF.Close()
 
 	content, err := ioutil.ReadAll(sheetF)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(8)
 	}
 
 	log, err := timelog.ParseTimeLogString(string(content))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(8)
 	}
 	log.Sort()
-
-	codes := log.Codes()
 
 	if os.Args[1] == "report" {
 		begin, end, code := ParseReportRequest(os.Args[2:], append(codes, "clean"))
@@ -132,9 +211,6 @@ func main() {
 			fmt.Printf("%s: %2.1f hours\n", c, t.Hours())
 		}
 
-		// TODO: Try to add some code in here to detect if the command is run in a git repo, and if so try to grab
-		// commits and match them to the periods.
-
 		return
 	}
 
@@ -171,7 +247,30 @@ func main() {
 			os.Exit(1)
 		}
 
-		last.Code = strings.Join(os.Args[2:], " ")
+		last.Code = strings.Join(os.Args[2:], ":")
+		if strings.ContainsAny(last.Code, " \t") {
+			fmt.Fprintln(os.Stderr, "Provided code contains whitespace.")
+			os.Exit(1)
+		}
+
+		// Check if code is new, and if it is add it to the timecode file.
+		found := false
+		for _, v := range codes {
+			if v == last.Code {
+				found = true
+				break
+			}
+		}
+		if !found {
+			codes = append(codes, last.Code)
+			err := ioutil.WriteFile("", []byte(strings.Join(codes, "\n")), 0666)
+			if last == nil {
+				fmt.Fprintln(os.Stderr, "Could not write modified code file, aborted.")
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
+
 		fmt.Printf("Changed last event time code to: %v\n", last.Code)
 
 	// Fix descriptions
@@ -292,22 +391,30 @@ func ParseLine(l []string, codes []string) (time.Time, string, string) {
 		fmt.Fprintln(os.Stderr, "Multiple times found in input, using first one found.")
 	}
 
-	// Try to find a time code. Prefer the first one, and if two start at the same spot, prefer the longest one.
+	// Try to find a time code.
 	code := ""
-	at := -1
-	for _, c := range codes {
-		nat := strings.Index(whole, c)
-		if nat >= 0 && ((nat < at) || (nat == at && len(c) > len(code)) || at == -1) {
-			if at != -1 {
-				fmt.Fprintln(os.Stderr, "Multiple time codes found in input, using first/longest one found.")
-			}
-			code = c
-			at = nat
+	foundcode := ""
+	for _, v := range l {
+		found := fuzzy.RankFindNormalizedFold(v, codes)
+		if len(found) > 1 {
+			sort.Sort(found)
+
+			fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
+
+			// TODO: Prompt the user to pick an option?
+			code = found[0].Target
+			foundcode = found[0].Source
+			break
+		} else if len(found) == 1 {
+			code = found[0].Target
+			foundcode = found[0].Source
+			break
 		}
 	}
+	
 
 	// If the time code and time prefix the string (in any order), strip them.
-	for _, v := range []string{code, times[0].Text, code} {
+	for _, v := range []string{foundcode, times[0].Text, foundcode} {
 		if strings.HasPrefix(whole, v) {
 			whole = strings.TrimSpace(strings.TrimPrefix(whole, v))
 		}
@@ -350,17 +457,21 @@ func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, str
 		fmt.Fprintln(os.Stderr, "Multiple times found in input, using first two found.")
 	}
 
-	// Try to find a time code. Prefer the first one, and if two start at the same spot, prefer the longest one.
+	// Try to find a time code.
 	code := ""
-	at := -1
-	for _, c := range codes {
-		nat := strings.Index(whole, c)
-		if nat >= 0 && ((nat < at) || (nat == at && len(c) > len(code)) || at == -1) {
-			if at != -1 {
-				fmt.Fprintln(os.Stderr, "Multiple time codes found in input, using first/longest one found.")
-			}
-			code = c
-			at = nat
+	for _, v := range l {
+		found := fuzzy.RankFindNormalizedFold(v, codes)
+		if len(found) > 1 {
+			sort.Sort(found)
+
+			fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
+
+			// TODO: Prompt the user to pick an option?
+			code = found[0].Target
+			break
+		} else if len(found) == 1 {
+			code = found[0].Target
+			break
 		}
 	}
 
@@ -368,4 +479,33 @@ func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, str
 		return &begin, &end, code
 	}
 	return &begin, nil, code
+}
+
+// This is prehistoric code, based on stuff originally written for Rubble
+func ParseINI(input string, result map[string]string) {
+	lines := strings.Split(input, "\n")
+	for i := range lines {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		parts[0] = strings.TrimSpace(parts[0])
+		parts[1] = strings.TrimSpace(parts[1])
+		if un, err := strconv.Unquote(parts[1]); err == nil {
+			parts[1] = un
+		}
+		result[parts[0]] = parts[1]
+	}
 }
