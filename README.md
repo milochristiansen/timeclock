@@ -63,9 +63,10 @@ So, how does this work?
 Pretty simply really. First, the program attempts to identify the time. It does this by searching the entire input
 string for anything that could possibly be a time or date. If it finds *anything* that it can interpret as a time, it
 picks the first such item and uses it as the time for the event. After doing that, it goes through the entire input
-looking for any of the timecodes it knows about. Once again, if it finds one it uses the first one it finds. After that,
-if the time code or the string it parsed to get the event time prefix the input (in any order) it will strip them off.
-Any remaining text will then be used as an event description.
+looking for any of the timecodes it knows about. Once again, if it finds one, or something that it views as a close
+enough match to one, it uses the first one it finds that is a close enough match. After that if the time code or the
+string it parsed to get the event time prefix the input (in any order) it will strip them off. Any remaining text will
+then be used as an event description.
 
 
 ### Creating or setting a timecode
@@ -76,14 +77,15 @@ subcommand.
 	timeclock code NewCode
 
 This sets the timecode for the last time event to `NewCode`. This code does not have to be a new code, you can also use
-this command to fix a case where you forgot to add a time code or specified the wrong one.
+this command to fix a case where you forgot to add a time code or specified the wrong one. This subcommand does not use
+fuzzy matching for timecodes! Make sure you specify the code you want exactly.
 
 
 ### Getting currently known timecodes
 
 Memory like mine? Just need a quick refresher on what the currently known codes are?
 
-	timeclock codes
+	timeclock info
 
 This simply prints out a list of all known timecodes.
 
