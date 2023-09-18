@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -141,7 +142,7 @@ func main() {
 		})
 	}
 
-	// Load timecodes
+	// Load and filter timecodes
 	codesraw, err := ioutil.ReadFile(config["codefile"])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error reading timecode file:")
@@ -149,6 +150,18 @@ func main() {
 		os.Exit(7)
 	}
 	codes := strings.Split(string(codesraw), "\n")
+	codes = slices.DeleteFunc(codes, func(e string) bool {
+		if e == "" {
+			return false
+		}
+		if strings.ContainsAny(e, " \t") {
+			return false
+		}
+		if strings.HasPrefix(e, "#") || strings.HasPrefix(e, "//") || strings.HasPrefix(e, ";") {
+			return false
+		}
+		return true
+	})
 
 	// Now on to our regularly scheduled program
 
