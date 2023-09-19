@@ -152,15 +152,15 @@ func main() {
 	codes := strings.Split(string(codesraw), "\n")
 	codes = slices.DeleteFunc(codes, func(e string) bool {
 		if e == "" {
-			return false
+			return true
 		}
 		if strings.ContainsAny(e, " \t") {
-			return false
+			return true
 		}
 		if strings.HasPrefix(e, "#") || strings.HasPrefix(e, "//") || strings.HasPrefix(e, ";") {
-			return false
+			return true
 		}
-		return true
+		return false
 	})
 
 	// Now on to our regularly scheduled program
@@ -380,6 +380,42 @@ func main() {
 	}
 }
 
+type FoundCode struct {
+	Code string
+	Found string
+	Distance int
+}
+
+// FindAllTimecodes finds all possible timecodes in the input line, and returns them ranked by how likely they are.
+func FindAllTimecodes(candidates []string, codes []string) []FoundCode {
+	// Find all possible matches
+	// This is done code by code to make duplicate elimination sane.
+	found := []FoundCode{}
+	for _, code := range codes {
+		best := FoundCode{Distance: -1}
+		for _, candidate := range candidates {
+			// Not documented in the library, but -1 is no match, 0 is "perfect" match
+			found := fuzzy.RankMatchNormalizedFold(candidate, code)
+			if found == -1 || found < best.Distance {
+				continue
+			}
+
+			best.Distance = found
+			best.Code = code
+			best.Found = candidate
+		}
+		if best.Distance != -1 {
+			found = append(found, best)
+		}
+	}
+
+	sort.Slice(found, func(i, j int) bool {
+		return found[i].Distance < found[j].Distance
+	})
+
+	return found
+}
+
 var DateParser = dateparser.Parser{}
 
 // Returns the first time found, a time code if one is found, and the whole line with minor editing.
@@ -405,35 +441,23 @@ func ParseLine(l []string, codes []string) (time.Time, string, string) {
 	}
 
 	// Try to find a time code.
-	code := ""
-	foundcode := ""
-	for _, v := range l {
-		found := fuzzy.RankFindNormalizedFold(v, codes)
-		if len(found) > 1 {
-			sort.Sort(found)
-
-			fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
-
-			// TODO: Prompt the user to pick an option?
-			code = found[0].Target
-			foundcode = found[0].Source
-			break
-		} else if len(found) == 1 {
-			code = found[0].Target
-			foundcode = found[0].Source
-			break
-		}
+	code := FoundCode{}
+	found := FindAllTimecodes(l, codes)
+	if len(found) > 1 {
+		fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
 	}
-	
+	if len(found) > 0 {
+		code = found[0]
+	}
 
 	// If the time code and time prefix the string (in any order), strip them.
-	for _, v := range []string{foundcode, times[0].Text, foundcode} {
+	for _, v := range []string{code.Code, times[0].Text, code.Found} {
 		if strings.HasPrefix(whole, v) {
 			whole = strings.TrimSpace(strings.TrimPrefix(whole, v))
 		}
 	}
 
-	return times[0].Date.Time.Round(6 * time.Minute), code, whole
+	return times[0].Date.Time.Round(6 * time.Minute), code.Code, whole
 }
 
 // Returns the first two times found and a code if provided.
@@ -471,27 +495,19 @@ func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, str
 	}
 
 	// Try to find a time code.
-	code := ""
-	for _, v := range l {
-		found := fuzzy.RankFindNormalizedFold(v, codes)
-		if len(found) > 1 {
-			sort.Sort(found)
-
-			fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
-
-			// TODO: Prompt the user to pick an option?
-			code = found[0].Target
-			break
-		} else if len(found) == 1 {
-			code = found[0].Target
-			break
-		}
+	code := FoundCode{}
+	found := FindAllTimecodes(l, codes)
+	if len(found) > 1 {
+		fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
+	}
+	if len(found) > 0 {
+		code = found[0]
 	}
 
 	if len(times) > 1 {
-		return &begin, &end, code
+		return &begin, &end, code.Code
 	}
-	return &begin, nil, code
+	return &begin, nil, code.Code
 }
 
 // This is prehistoric code, based on stuff originally written for Rubble
