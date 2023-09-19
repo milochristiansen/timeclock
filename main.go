@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
+	"github.com/manifoldco/promptui"
 	"github.com/markusmobius/go-dateparser"
 
 	"github.com/milochristiansen/timeclock/timelog"
@@ -250,7 +251,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		last.At, _, _ = ParseLine(os.Args[2:], nil)
+		last.At, _, _ = ParseLine(os.Args[2:], nil, false)
 		fmt.Printf("Changed last event time to: %v\n", last.At.Format(timelog.TimeFormat))
 
 	// Fix time codes
@@ -315,7 +316,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		t, c, d := ParseLine(os.Args[2:], codes)
+		t, c, d := ParseLine(os.Args[2:], codes, true)
 		last = &timelog.Event{
 			At:   t,
 			Code: c,
@@ -332,7 +333,16 @@ func main() {
 
 	// Handle the default clock in/out action
 	default:
-		t, c, d := ParseLine(os.Args[1:], codes)
+		i := 1
+		if os.Args[1] == "noprompt" {
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "Insufficient arguments for too.")
+				os.Exit(1)
+			}
+			i = 2
+		}
+
+		t, c, d := ParseLine(os.Args[i:], codes, true) // TODO: Allow disabling prompt.
 		old := last
 
 		if t.Before(old.At) {
@@ -419,7 +429,7 @@ func FindAllTimecodes(candidates []string, codes []string) []FoundCode {
 var DateParser = dateparser.Parser{}
 
 // Returns the first time found, a time code if one is found, and the whole line with minor editing.
-func ParseLine(l []string, codes []string) (time.Time, string, string) {
+func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, string) {
 	whole := strings.Join(l, " ")
 
 	// Try to find a time in the description
@@ -443,10 +453,29 @@ func ParseLine(l []string, codes []string) (time.Time, string, string) {
 	// Try to find a time code.
 	code := FoundCode{}
 	found := FindAllTimecodes(l, codes)
-	if len(found) > 1 {
-		fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
-	}
-	if len(found) > 0 {
+	if len(found) > 1 && canprompt {
+		fmt.Fprintln(os.Stdout, "Multiple possible time codes found in input:")
+
+		foundstrings := []string{}
+		for _, v := range found {
+			foundstrings = append(foundstrings, v.Code)
+		}
+
+		prompt := promptui.Select{
+			Label: "Select Code",
+			Items: foundstrings,
+		}
+		i, _, err := prompt.Run()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		code = found[i]
+	} else if len(found) > 0 {
+		if len(found) > 1 {
+			fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, picking best match.")
+		}
 		code = found[0]
 	}
 
