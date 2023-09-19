@@ -31,6 +31,10 @@ variable you like.
 
 You will, of course, need to have the latest Go complier installed.
 
+Note: If you call the timeclock binary with the name `timetool` it will suppress any user interactive elements
+(prompting for more input for example). The best way to do this is add a symlink to the binary with that name. I'm going
+to assume that if you need this functionality, you will know enough to figure it out for yourself from there.
+
 
 ## Available Actions
 

@@ -80,10 +80,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "    To be valid, all that is required is a time. If the time and/or time code")
 		fmt.Fprintln(os.Stderr, "    are the first things on the command line they will be stripped and the")
 		fmt.Fprintln(os.Stderr, "    remaining text will be used as the description. If they are embedded in")
-		fmt.Fprintln(os.Stderr, "    the main body of the text, then the whole text is used unmodified. Time")
-		fmt.Fprintln(os.Stderr, "    codes are defined by matching existing codes in the log. To define a new")
-		fmt.Fprintln(os.Stderr, "    code, create the event, then set the code with 'code'.")
+		fmt.Fprintln(os.Stderr, "    the main body of the text, then the whole text is used unmodified. To")
+		fmt.Fprintln(os.Stderr, "    define a new code, create the event, then set the code with 'code'.")
 		os.Exit(2)
+	}
+
+	ToolMode := false
+	if os.Args[0] == "timetool" {
+		ToolMode = true
 	}
 
 	// Find/create the configuration directory.
@@ -316,7 +320,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		t, c, d := ParseLine(os.Args[2:], codes, true)
+		t, c, d := ParseLine(os.Args[2:], codes, ToolMode)
 		last = &timelog.Event{
 			At:   t,
 			Code: c,
@@ -333,16 +337,7 @@ func main() {
 
 	// Handle the default clock in/out action
 	default:
-		i := 1
-		if os.Args[1] == "noprompt" {
-			if len(os.Args) < 3 {
-				fmt.Fprintln(os.Stderr, "Insufficient arguments for too.")
-				os.Exit(1)
-			}
-			i = 2
-		}
-
-		t, c, d := ParseLine(os.Args[i:], codes, true) // TODO: Allow disabling prompt.
+		t, c, d := ParseLine(os.Args[1:], codes, ToolMode)
 		old := last
 
 		if t.Before(old.At) {
