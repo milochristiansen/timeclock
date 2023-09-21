@@ -25,6 +25,7 @@ package timelog
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -132,4 +133,81 @@ func (log TimeLog) Periods() []*Period {
 	}
 
 	return out
+}
+type TimecodeTreeNode struct {
+	Kids map[string]*TimecodeTreeNode
+	Self string
+}
+	
+func GenerateTimecodeTree(codes []string) *TimecodeTreeNode {
+	codetree := &TimecodeTreeNode{Kids: map[string]*TimecodeTreeNode{}, Self: "-"}
+	for _, code := range codes {
+		parts := strings.Split(code, ":")
+		n := codetree
+		sofar := ""
+		for i, part := range parts {
+			if i != 0 {
+				sofar += ":"
+			}
+			sofar += part
+			kid, ok := n.Kids[part]
+			if !ok {
+				kid = &TimecodeTreeNode{Kids: map[string]*TimecodeTreeNode{}, Self: sofar}
+				n.Kids[part] = kid
+			}
+			n = kid
+		}
+	}
+	return codetree
+}
+
+// FilterOutPeriods removes all [Period] items that match the given time code and its children.
+func FilterOutPeriodsChildren(p []*Period, code string, codetree *TimecodeTreeNode) []*Period {
+	// Find the node for the given code
+	parts := strings.Split(code, ":")
+	n := codetree
+	for _, part := range parts {
+		kid, ok := n.Kids[part]
+		if !ok {
+			// Code not found in tree.
+			return nil
+		}
+		n = kid
+	}
+
+	// n is the node for the current code. Now walk down the remaining children, filtering them in.
+	return filterOutPeriodsChildren(p, n)
+}
+
+func filterOutPeriodsChildren(p []*Period, n *TimecodeTreeNode) []*Period {
+	for _, kid := range n.Kids {
+		p = filterOutPeriodsChildren(p, kid)
+	}
+
+	return FilterOutPeriods(p, n.Self)
+}
+
+// FilterInPeriods removes all [Period] items that *do not* match the given time code and its children.
+func FilterInPeriodsChildren(p []*Period, code string, codetree *TimecodeTreeNode) []*Period {
+	// Find the node for the given code
+	parts := strings.Split(code, ":")
+	n := codetree
+	for _, part := range parts {
+		kid, ok := n.Kids[part]
+		if !ok {
+			// Code not found in tree.
+			return nil
+		}
+		n = kid
+	}
+
+	return filterInPeriodsChildren(p, n)
+}
+
+func filterInPeriodsChildren(p []*Period, n *TimecodeTreeNode) []*Period {
+	for _, kid := range n.Kids {
+		p = filterInPeriodsChildren(p, kid)
+	}
+
+	return FilterInPeriods(p, n.Self)
 }

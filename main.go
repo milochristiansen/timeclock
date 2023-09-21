@@ -67,9 +67,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "'report'")
 		fmt.Fprintln(os.Stderr, "    Print a report. You must provide a time to set the start point for the")
 		fmt.Fprintln(os.Stderr, "    report. Optionally, you may also provide a time code to limit the report")
-		fmt.Fprintln(os.Stderr, "    to only events that match the time code.")
-		fmt.Fprintln(os.Stderr, "    The special hardcoded timecode 'clean' may be used to output only periods")
-		fmt.Fprintln(os.Stderr, "    that have a non-blank timecode.")
+		fmt.Fprintln(os.Stderr, "    to only events that match the time code. If no code is provided, the 'all'")
+		fmt.Fprintln(os.Stderr, "    code is automatically added.")
+		fmt.Fprintln(os.Stderr, "    The special hardcoded timecode 'empty' may be used to output periods that")
+		fmt.Fprintln(os.Stderr, "    have a blank timecode, and the code 'all' will output all periods that")
+		fmt.Fprintln(os.Stderr, "    have a non-blank timecode.")
+		fmt.Fprintln(os.Stderr, "    To actually see all events, you must use 'empty' and 'all' together!")
 		fmt.Fprintln(os.Stderr, "'info'")
 		fmt.Fprintln(os.Stderr, "    List all known time codes.")
 		fmt.Fprintln(os.Stderr, "'test'")
@@ -168,6 +171,9 @@ func main() {
 		return false
 	})
 
+	// Create a timecode tree for hierarchical filtering.
+	codetree := timelog.GenerateTimecodeTree(codes)
+
 	// Now on to our regularly scheduled program
 
 	// Open the timesheet
@@ -191,30 +197,53 @@ func main() {
 	}
 	log.Sort()
 
+	// Reporting
 	if os.Args[1] == "report" {
-		begin, end, code := ParseReportRequest(os.Args[2:], append(codes, "clean"))
+		begin, end, fcode := ParseReportRequest(os.Args[2:], append(codes, "empty", "all"))
 		
-		var periods []*timelog.Period
+		var all []*timelog.Period
 		if end == nil {
-			periods = log.After(*begin).Periods()
+			all = log.After(*begin).Periods()
 		} else {
-			periods = log.Between(*begin, *end).Periods()
+			all = log.Between(*begin, *end).Periods()
 		}
-		if code == "clean" {
-			periods = timelog.FilterOutPeriods(periods, "")
 
-			fmt.Printf("Showing report for all non-empty time codes.\n")
-		} else if code != "" {
-			periods = timelog.FilterInPeriods(periods, code)
-
-			fmt.Printf("Showing report for time code: %v\n", code)
-		} else {
-			fmt.Printf("Showing report for all time codes.\n")
+		if len(fcode) == 0 {
+			fcode = append(fcode, "all")
+			fmt.Println("No timecodes provided, using 'all'")
 		}
+
+		var periods []*timelog.Period
+		for _, code := range fcode {
+			if code == "empty" {
+				periods = append(periods, timelog.FilterInPeriods(all, "")...)
+				all = timelog.FilterOutPeriods(all, "")
+				continue
+			}
+			if code == "all" {
+				periods = append(periods, timelog.FilterOutPeriods(all, "")...)
+				all = timelog.FilterInPeriods(all, "")
+				continue
+			}
+
+			periods = append(periods, timelog.FilterInPeriodsChildren(all, code, codetree)...)
+			all = timelog.FilterOutPeriods(all, code)
+		}
+
+		// Since the way we build the event list leaves them in whatever jumbled up order they happen to end up in, sort.
+		sort.Slice(periods, func(i, j int) bool {
+			return periods[i].Begin.Before(periods[j].Begin)
+		})
+
 		if end == nil {
 			fmt.Printf("Periods after: %v\n", begin.Format(timelog.TimeFormat))
 		} else {
 			fmt.Printf("Periods between: %v - %v\n", begin.Format(timelog.TimeFormat), end.Format(timelog.TimeFormat))
+		}
+
+		if len(periods) == 0 {
+			fmt.Println("No periods in given time range.")
+			return
 		}
 
 		running := map[string]time.Duration{}
@@ -224,6 +253,7 @@ func main() {
 		}
 		for c, t := range running {
 			if c == "" {
+				fmt.Printf("empty: %2.1f hours\n", t.Hours())
 				continue
 			}
 			fmt.Printf("%s: %2.1f hours\n", c, t.Hours())
@@ -485,7 +515,7 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 }
 
 // Returns the first two times found and a code if provided.
-func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, string) {
+func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, []string) {
 	whole := strings.Join(l, " ")
 
 	// Try to find a time in the description
@@ -519,19 +549,16 @@ func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, str
 	}
 
 	// Try to find a time code.
-	code := FoundCode{}
 	found := FindAllTimecodes(l, codes)
-	if len(found) > 1 {
-		fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, using best match.")
-	}
-	if len(found) > 0 {
-		code = found[0]
+	var foundcodes []string
+	for _, f := range found {
+		foundcodes = append(foundcodes, f.Code)
 	}
 
 	if len(times) > 1 {
-		return &begin, &end, code.Code
+		return &begin, &end, foundcodes
 	}
-	return &begin, nil, code.Code
+	return &begin, nil, foundcodes
 }
 
 // This is prehistoric code, based on stuff originally written for Rubble
