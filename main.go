@@ -226,7 +226,16 @@ func main() {
 				continue
 			}
 
-			periods = append(periods, timelog.FilterInPeriodsChildren(all, code, codetree)...)
+			var ok1, ok2 bool
+			code, ok1 = strings.CutSuffix(code, ":*")
+			code, ok2 = strings.CutSuffix(code, ":...")
+			hasWildcard := ok1 || ok2
+
+			if hasWildcard {
+				periods = append(periods, timelog.FilterInPeriodsChildren(all, code, codetree)...)
+				continue
+			}
+			periods = append(periods, timelog.FilterInPeriods(all, code)...)
 			all = timelog.FilterOutPeriods(all, code)
 		}
 
