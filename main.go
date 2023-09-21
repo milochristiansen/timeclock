@@ -23,6 +23,7 @@ misrepresented as being the original software.
 package main
 
 import (
+	"embed"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -32,6 +33,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -50,6 +52,17 @@ import (
 // 6: Could not find/read config file
 // 7: Could not find/read timecode file
 // 8: Could not find/read timelog file
+// 9: Could not find/read report file
+
+//go:embed reports/*
+var builtinReports embed.FS
+
+type ReportData struct {
+	Begin   *time.Time
+	End     *time.Time
+	Periods []*timelog.Period
+	Totals  map[string]time.Duration
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -116,8 +129,9 @@ func main() {
 
 	// Load the config file
 	config := map[string]string{
-		"logfile": "$HOME/sctime.log",
-		"codefile": "$CONFIG/codes.txt",
+		"logfile":    "$HOME/sctime.log",
+		"codefile":   "$CONFIG/codes.txt",
+		"reportsdir": "$CONFIG/reports",
 	}
 
 	configraw, err := ioutil.ReadFile(configdir + "/config.ini")
@@ -200,8 +214,17 @@ func main() {
 
 	// Reporting
 	if os.Args[1] == "report" {
-		begin, end, fcode := ParseReportRequest(os.Args[2:], append(codes, "empty", "all"))
-		
+		// Load the templates
+		templates := template.Must(template.ParseFS(builtinReports, "reports/*.tmpl"))
+		templates, err := templates.ParseFS(os.DirFS(config["reportsdir"]), "*.tmpl")
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintln(os.Stderr, "Error reading report templates:")
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(9)
+		}
+
+		begin, end, fcode, template := ParseReportRequest(os.Args[2:], append(codes, "empty", "all"), templates)
+
 		var all []*timelog.Period
 		if end == nil {
 			all = log.After(*begin).Periods()
@@ -258,14 +281,18 @@ func main() {
 		running := map[string]time.Duration{}
 		for _, p := range periods {
 			running[p.Code] += p.Length()
-			fmt.Println(p.String())
 		}
-		for c, t := range running {
-			if c == "" {
-				fmt.Printf("empty: %2.1f hours\n", t.Hours())
-				continue
-			}
-			fmt.Printf("%s: %2.1f hours\n", c, t.Hours())
+
+		err = template.Execute(os.Stdout, ReportData{
+			Begin:   begin,
+			End:     end,
+			Periods: periods,
+			Totals:  running,
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error executing report template:")
+			fmt.Fprintln(os.Stderr, err)
+			return
 		}
 
 		return
@@ -547,7 +574,7 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 }
 
 // Returns the first two times found and a code if provided.
-func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, []string) {
+func ParseReportRequest(l []string, codes []string, reports *template.Template) (*time.Time, *time.Time, []string, *template.Template) {
 	whole := strings.Join(l, " ")
 
 	// Try to find a time in the description
@@ -587,10 +614,28 @@ func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, []s
 		foundcodes = append(foundcodes, f[0].Code)
 	}
 
-	if len(times) > 1 {
-		return &begin, &end, foundcodes
+	// Find the template
+	foundtemplates := []*template.Template{}
+	for _, word := range l {
+		foundtmpl := reports.Lookup(word)
+		if foundtmpl != nil {
+			foundtemplates = append(foundtemplates, foundtmpl)
+		}
 	}
-	return &begin, nil, foundcodes
+
+	template := reports.Lookup("default.tmpl")
+	if len(foundtemplates) > 1 {
+		fmt.Fprintln(os.Stderr, "Multiple templates found in input, using first one found.")
+	}
+
+	if len(foundtemplates) != 0 {
+		template = foundtemplates[0]
+	}
+
+	if len(times) > 1 {
+		return &begin, &end, foundcodes, template
+	}
+	return &begin, nil, foundcodes, template
 }
 
 // This is prehistoric code, based on stuff originally written for Rubble

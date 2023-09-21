@@ -17,13 +17,17 @@ Inside this directory there should be a file named `config.ini`. The default con
 
 	logfile="$HOME/sctime.log"
 	codefile="$CONFIG/codes.txt"
+	reportdir="$CONFIG/reports"
 
 `$CONFIG` is a special variable set to the current configuration directory. Otherwise, you may use any environment
 variable you like.
 
 `logfile` is the path to your timelog.
 `codefile` is the path to a file containing all of your timecodes, one per line.
+`reportdir` is the path to a folder containing the report templates.
 
+Any file inside `reportdir` matching `*.tmpl` will be read as a report template. Reports defined in `reportdir`
+will override builtin reports. Reports are templated with go's [text/template](https://pkg.go.dev/text/template).
 
 ## Building
 
@@ -145,10 +149,15 @@ timecode.
 
 	timeclock report last year :all :empty
 
+If you have created a report template, you may use it by adding its name.
+
+	timeclock report june 1st july 1st :all csv.tmpl
+
 Like the event adding code, the report code simply searches for times in the entire given input, but it will always use
 the first *two* it finds. If it only finds one, it will print a report from that time to the current time, if it finds
 two it will use them as start and end times. These times can be in any order. Similarly, the timecode used for filtering
-is found via a search of the entire given input (although it still needs to be prefixed with a colon as normal).
+and the report template are found via a search of the entire given input (although the timecode still needs to be
+prefixed with a colon as normal).
 
 If you have timecodes arranged in a hierarchical manner, with children separated from parents with a colon
 (eg `parent:child:child`), a report filtered for `parent` will not automatically include its children. You can add `:...`
