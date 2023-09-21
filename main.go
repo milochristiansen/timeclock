@@ -210,7 +210,7 @@ func main() {
 
 		if len(fcode) == 0 {
 			fcode = append(fcode, "all")
-			fmt.Println("No timecodes provided, using 'all'")
+			fmt.Fprintln(os.Stderr, "No timecodes provided, using 'all'")
 		}
 
 		var periods []*timelog.Period
@@ -245,13 +245,13 @@ func main() {
 		})
 
 		if end == nil {
-			fmt.Printf("Periods after: %v\n", begin.Format(timelog.TimeFormat))
+			fmt.Fprintf(os.Stderr, "Periods after: %v\n", begin.Format(timelog.TimeFormat))
 		} else {
-			fmt.Printf("Periods between: %v - %v\n", begin.Format(timelog.TimeFormat), end.Format(timelog.TimeFormat))
+			fmt.Fprintf(os.Stderr, "Periods between: %v - %v\n", begin.Format(timelog.TimeFormat), end.Format(timelog.TimeFormat))
 		}
 
 		if len(periods) == 0 {
-			fmt.Println("No periods in given time range.")
+			fmt.Fprintln(os.Stderr, "No periods in given time range.")
 			return
 		}
 
