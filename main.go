@@ -28,6 +28,7 @@ import (
 	"io/ioutil"
 	"os"
 	"slices"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -158,11 +159,11 @@ func main() {
 		os.Exit(7)
 	}
 	codes := strings.Split(string(codesraw), "\n")
+	for i := range codes {
+		codes[i] = strings.TrimSpace(codes[i])
+	}
 	codes = slices.DeleteFunc(codes, func(e string) bool {
 		if e == "" {
-			return true
-		}
-		if strings.ContainsAny(e, " \t") {
 			return true
 		}
 		if strings.HasPrefix(e, "#") || strings.HasPrefix(e, "//") || strings.HasPrefix(e, ";") {
@@ -211,6 +212,8 @@ func main() {
 		if len(fcode) == 0 {
 			fcode = append(fcode, "all")
 			fmt.Fprintln(os.Stderr, "No timecodes provided, using 'all'")
+		} else {
+			fmt.Fprintf(os.Stderr, "Timecodes: %v\n", strings.Join(fcode, ", "))
 		}
 
 		var periods []*timelog.Period
@@ -226,10 +229,7 @@ func main() {
 				continue
 			}
 
-			var ok1, ok2 bool
-			code, ok1 = strings.CutSuffix(code, ":*")
-			code, ok2 = strings.CutSuffix(code, ":...")
-			hasWildcard := ok1 || ok2
+			code, hasWildcard := strings.CutSuffix(code, ":...")
 
 			if hasWildcard {
 				periods = append(periods, timelog.FilterInPeriodsChildren(all, code, codetree)...)
@@ -304,11 +304,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		last.Code = strings.Join(os.Args[2:], ":")
-		if strings.ContainsAny(last.Code, " \t") {
-			fmt.Fprintln(os.Stderr, "Provided code contains whitespace.")
-			os.Exit(1)
-		}
+		last.Code = strings.Join(os.Args[2:], " ")
 
 		// Check if code is new, and if it is add it to the timecode file.
 		found := false
@@ -359,7 +355,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		t, c, d := ParseLine(os.Args[2:], codes, ToolMode)
+		t, c, d := ParseLine(os.Args[2:], codes, !ToolMode)
 		last = &timelog.Event{
 			At:   t,
 			Code: c,
@@ -376,7 +372,7 @@ func main() {
 
 	// Handle the default clock in/out action
 	default:
-		t, c, d := ParseLine(os.Args[1:], codes, ToolMode)
+		t, c, d := ParseLine(os.Args[1:], codes, !ToolMode)
 		old := last
 
 		if t.Before(old.At) {
@@ -431,33 +427,46 @@ type FoundCode struct {
 }
 
 // FindAllTimecodes finds all possible timecodes in the input line, and returns them ranked by how likely they are.
-func FindAllTimecodes(candidates []string, codes []string) []FoundCode {
-	// Find all possible matches
-	// This is done code by code to make duplicate elimination sane.
-	found := []FoundCode{}
-	for _, code := range codes {
-		best := FoundCode{Distance: -1}
-		for _, candidate := range candidates {
-			// Not documented in the library, but -1 is no match, 0 is "perfect" match
-			found := fuzzy.RankMatchNormalizedFold(candidate, code)
-			if found == -1 || found < best.Distance {
-				continue
-			}
-
-			best.Distance = found
-			best.Code = code
-			best.Found = candidate
-		}
-		if best.Distance != -1 {
-			found = append(found, best)
+func FindAllTimecodes(candidates []string, codes []string) (map[string][]FoundCode, int) {
+	// Get a list of all possible timecode candidates
+	foundcodes := map[string][]FoundCode{}
+	for _, candidate := range candidates {
+		if strings.HasPrefix(candidate, ":") {
+			foundcodes[strings.TrimPrefix(candidate, ":")] = []FoundCode{}
 		}
 	}
 
-	sort.Slice(found, func(i, j int) bool {
-		return found[i].Distance < found[j].Distance
+	total := 0
+
+	// Match each candidate against the possible codes.
+	for candidate := range foundcodes {
+		for _, code := range codes {
+			c, hasWildcard := strings.CutSuffix(candidate, ":...")
+
+			found := fuzzy.RankMatchNormalizedFold(c, code)
+			if found == -1 {
+				continue
+			}
+
+			total++
+			if hasWildcard {
+				foundcodes[candidate] = append(foundcodes[candidate], FoundCode{Code: code + ":...", Found: candidate, Distance: found})
+				continue
+			}
+			foundcodes[candidate] = append(foundcodes[candidate], FoundCode{Code: code, Found: candidate, Distance: found})
+		}
+
+		sort.Slice(foundcodes[candidate], func(i, j int) bool {
+			return foundcodes[candidate][i].Distance < foundcodes[candidate][j].Distance
+		})
+	}
+
+	// Clear everything from the candidate map that didn't get any matches.
+	maps.DeleteFunc(foundcodes, func(k string, v []FoundCode) bool {
+		return len(v) == 0
 	})
 
-	return found
+	return foundcodes, total
 }
 
 var DateParser = dateparser.Parser{}
@@ -486,13 +495,17 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 
 	// Try to find a time code.
 	code := FoundCode{}
-	found := FindAllTimecodes(l, codes)
-	if len(found) > 1 && canprompt {
+	found, total := FindAllTimecodes(l, codes)
+	if total > 1 && canprompt {
 		fmt.Fprintln(os.Stdout, "Multiple possible time codes found in input:")
 
 		foundstrings := []string{}
-		for _, v := range found {
-			foundstrings = append(foundstrings, v.Code)
+		foundmap := []struct{c string; i int}{}
+		for c, l := range found {
+			for i, v := range l {
+				foundstrings = append(foundstrings, v.Code)
+				foundmap = append(foundmap, struct{c string; i int}{c, i})
+			}
 		}
 
 		prompt := promptui.Select{
@@ -505,20 +518,30 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 			os.Exit(1)
 		}
 
-		code = found[i]
+		code = found[foundmap[i].c][foundmap[i].i]
 	} else if len(found) > 0 {
-		if len(found) > 1 {
+		if total > 1 {
 			fmt.Fprintln(os.Stderr, "Multiple possible time codes found in input, picking best match.")
 		}
-		code = found[0]
+
+		best := FoundCode{Distance: -1}
+		for _, item := range found {
+			if item[0].Distance < best.Distance || best.Distance == -1 {
+				best = item[0]
+			}
+		}
+		code = best
 	}
 
 	// If the time code and time prefix the string (in any order), strip them.
-	for _, v := range []string{code.Code, times[0].Text, code.Found} {
+	for _, v := range []string{":" + code.Found, times[0].Text, ":" + code.Found} {
 		if strings.HasPrefix(whole, v) {
 			whole = strings.TrimSpace(strings.TrimPrefix(whole, v))
 		}
 	}
+
+	// Strip the prefix colon from the first occurrence of the chosen timecode.
+	whole = strings.Replace(whole, ":" + code.Found, code.Found, 1)
 
 	return times[0].Date.Time.Round(6 * time.Minute), code.Code, whole
 }
@@ -558,10 +581,10 @@ func ParseReportRequest(l []string, codes []string) (*time.Time, *time.Time, []s
 	}
 
 	// Try to find a time code.
-	found := FindAllTimecodes(l, codes)
+	found, _ := FindAllTimecodes(l, codes)
 	var foundcodes []string
 	for _, f := range found {
-		foundcodes = append(foundcodes, f.Code)
+		foundcodes = append(foundcodes, f[0].Code)
 	}
 
 	if len(times) > 1 {

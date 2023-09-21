@@ -50,14 +50,14 @@ need to do is specify a time (most commonly `now`).
 
 Additionally, you can specify a time code and/or a description, but they are not required.
 
-	timeclock now Customer Did a thing.
+	timeclock now :Customer Did a thing.
 
 This will result in a event with the description "Did a thing." coded to `Customer` that happened at the time the
 command was run.
 
 Order is not generally important. You can even mix them together!
 
-	timeclock Did a thing for Customer at 10:00am
+	timeclock Did a thing for :Customer at 10:00am
 
 This will result in a event with the description "Did a thing for Customer at 10:00am" coded to `Customer` that happened
 at 10:00am on the day the command was run.
@@ -67,10 +67,11 @@ So, how does this work?
 Pretty simply really. First, the program attempts to identify the time. It does this by searching the entire input
 string for anything that could possibly be a time or date. If it finds *anything* that it can interpret as a time, it
 picks the first such item and uses it as the time for the event. After doing that, it goes through the entire input
-looking for any of the timecodes it knows about. Once again, if it finds one, or something that it views as a close
-enough match to one, it uses the first one it finds that is a close enough match. After that if the time code or the
-string it parsed to get the event time prefix the input (in any order) it will strip them off. Any remaining text will
-then be used as an event description.
+looking for any of the timecodes it knows about. To keep parsing sane, timecodes must be a single token and prefixed by
+a colon. If you want to use spaces in your timecodes, quote them. The prefixing colon will be stripped if the timecode
+text survives the next step. Speaking of which, as a final step if the time code or the string that was parsed to get
+the event time prefix the input (in any order) it will strip them off. Any remaining text will then be used as an event
+description.
 
 
 ### Creating or setting a timecode
@@ -127,22 +128,31 @@ and full of garbage.
 
 To clean it up, you can specify a timecode.
 
-	timeclock report last year Customer
+	timeclock report last year :Customer
 
 This will only show events for `Customer`, however that is rarely what you actually want. Generally, what you really
-want is all times that are coded to anything at all. For this you can use the special code `clean`. This timecode only
-exists for this command, and tells the program to omit any events that do not have a code.
+want is all times that are coded to anything at all. For this you can use the special code `all`. This timecode only
+exists for this command, and tells the program to show all events that have a code.
 
-	timeclock report last year clean
+	timeclock report last year :all
 
 If you want to get a report for a specific month, you also need an end time.
 
-	report june 1st july 1st clean
+	timeclock report june 1st july 1st :all
+
+If you really want *all* events you can also use the special code `empty`. This will filter in events that have no
+timecode.
+
+	timeclock report last year :all :empty
 
 Like the event adding code, the report code simply searches for times in the entire given input, but it will always use
 the first *two* it finds. If it only finds one, it will print a report from that time to the current time, if it finds
 two it will use them as start and end times. These times can be in any order. Similarly, the timecode used for filtering
-is found via a search of the entire given input.
+is found via a search of the entire given input (although it still needs to be prefixed with a colon as normal).
+
+If you have timecodes arranged in a hierarchical manner, with children separated from parents with a colon
+(eg `parent:child:child`), a report filtered for `parent` will not automatically include its children. You can add `:...`
+after a parent to force its children to also be included.
 
 
 ### WTF is this thing doing?
@@ -165,7 +175,7 @@ This will act just like the input was being used to specify a new event, but it 
 The timelog is stored on disk in a plain text format lightly inspired by [Ledger CLI](https://ledger-cli.org/). Each
 event is stored on a single line in the following format:
 
-	yyy/mm/dd hh:mmPM [timecode] description
+	yyyy/mm/dd hh:mmPM [timecode] description
 
 The timecode field is left padded with spaces so that every timecode is the same length in the entire file, but that is
 purely to make the fields vertically aligned for easier reading should you ever want to look at the file manually. This

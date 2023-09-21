@@ -205,9 +205,9 @@ func FilterInPeriodsChildren(p []*Period, code string, codetree *TimecodeTreeNod
 }
 
 func filterInPeriodsChildren(p []*Period, n *TimecodeTreeNode) []*Period {
+	out := []*Period{}
 	for _, kid := range n.Kids {
-		p = filterInPeriodsChildren(p, kid)
+		out = append(out, filterInPeriodsChildren(p, kid)...)
 	}
-
-	return FilterInPeriods(p, n.Self)
+	return append(out, FilterInPeriods(p, n.Self)...)
 }
