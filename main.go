@@ -27,12 +27,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"text/template"
 	"time"
 
@@ -215,13 +217,9 @@ func main() {
 	// Reporting
 	if os.Args[1] == "report" {
 		// Load the templates
-		templates := template.Must(template.ParseFS(builtinReports, "reports/*.tmpl"))
-		templates, err := templates.ParseFS(os.DirFS(config["reportsdir"]), "*.tmpl")
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintln(os.Stderr, "Error reading report templates:")
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(9)
-		}
+		templates := template.New("")
+		loadTemplatesFrom(builtinReports, templates)
+		loadTemplatesFrom(os.DirFS(config["reportsdir"]), templates)
 
 		begin, end, fcode, template := ParseReportRequest(os.Args[2:], append(codes, "empty", "all"), templates)
 
@@ -670,4 +668,46 @@ func ParseINI(input string, result map[string]string) {
 		}
 		result[parts[0]] = parts[1]
 	}
+}
+
+func loadTemplatesFrom(f fs.FS, t *template.Template) {
+	err := fs.WalkDir(f, ".", func(path string, d fs.DirEntry, err error) error {
+		if d == nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if strings.HasSuffix(d.Name(), ".tmpl") {
+			file, err := f.Open(path)
+			if err != nil {
+				return err
+			}
+			content, err := io.ReadAll(file)
+			if err != nil {
+				return err
+			}
+
+			nt := t.Lookup(d.Name())
+			if nt == nil {
+				_, err = t.New(d.Name()).Parse(string(content))
+				return err
+			}
+			_, err = nt.Parse(string(content))
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error reading report templates:")
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(9)
+	}
+	return
 }
