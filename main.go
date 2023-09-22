@@ -27,9 +27,9 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"maps"
 	"os"
 	"slices"
-	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,7 +66,7 @@ type ReportData struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		// Make this smarter? Write or find a formatter that can wrap text with indentation based on current terminal width. 
+		// Make this smarter? Write or find a formatter that can wrap text with indentation based on current terminal width.
 		fmt.Fprintln(os.Stderr, "No arguments provided. Cannot determine action.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "'time'")
@@ -144,7 +144,7 @@ func main() {
 			os.Exit(6)
 		}
 		for k, v := range config {
-			fmt.Fprintln(file, k + "=" + v)
+			fmt.Fprintln(file, k+"="+v)
 		}
 		file.Close()
 		os.Exit(6)
@@ -192,7 +192,7 @@ func main() {
 	// Now on to our regularly scheduled program
 
 	// Open the timesheet
-	sheetF, err := os.OpenFile(config["logfile"], os.O_RDWR | os.O_CREATE, 0644)
+	sheetF, err := os.OpenFile(config["logfile"], os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(8)
@@ -448,8 +448,8 @@ func main() {
 }
 
 type FoundCode struct {
-	Code string
-	Found string
+	Code     string
+	Found    string
 	Distance int
 }
 
@@ -527,11 +527,17 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 		fmt.Fprintln(os.Stdout, "Multiple possible time codes found in input:")
 
 		foundstrings := []string{}
-		foundmap := []struct{c string; i int}{}
+		foundmap := []struct {
+			c string
+			i int
+		}{}
 		for c, l := range found {
 			for i, v := range l {
 				foundstrings = append(foundstrings, v.Code)
-				foundmap = append(foundmap, struct{c string; i int}{c, i})
+				foundmap = append(foundmap, struct {
+					c string
+					i int
+				}{c, i})
 			}
 		}
 
@@ -568,7 +574,7 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 	}
 
 	// Strip the prefix colon from the first occurrence of the chosen timecode.
-	whole = strings.Replace(whole, ":" + code.Found, code.Found, 1)
+	whole = strings.Replace(whole, ":"+code.Found, code.Found, 1)
 
 	return times[0].Date.Time.Round(6 * time.Minute), code.Code, whole
 }
@@ -590,7 +596,6 @@ func ParseReportRequest(l []string, codes []string, reports *template.Template) 
 		fmt.Fprintln(os.Stderr, "No time found. (use \"now\" for current time.)")
 		os.Exit(1)
 	}
-
 
 	var begin, end time.Time
 

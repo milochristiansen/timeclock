@@ -124,9 +124,9 @@ func (log TimeLog) Periods() []*Period {
 		if last != nil {
 			out = append(out, &Period{
 				Begin: last.At,
-				End: item.At,
-				Desc: last.Desc,
-				Code: last.Code,
+				End:   item.At,
+				Desc:  last.Desc,
+				Code:  last.Code,
 			})
 		}
 		last = item
@@ -134,11 +134,12 @@ func (log TimeLog) Periods() []*Period {
 
 	return out
 }
+
 type TimecodeTreeNode struct {
 	Kids map[string]*TimecodeTreeNode
 	Self string
 }
-	
+
 func GenerateTimecodeTree(codes []string) *TimecodeTreeNode {
 	codetree := &TimecodeTreeNode{Kids: map[string]*TimecodeTreeNode{}, Self: "-"}
 	for _, code := range codes {
