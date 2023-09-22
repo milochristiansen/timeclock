@@ -26,7 +26,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"maps"
 	"os"
 	"slices"
@@ -134,7 +134,7 @@ func main() {
 		"reportsdir": "$CONFIG/reports",
 	}
 
-	configraw, err := ioutil.ReadFile(configdir + "/config.ini")
+	configraw, err := os.ReadFile(configdir + "/config.ini")
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Fprintln(os.Stderr, "Config file does not exist, writing defaults.")
 		file, err := os.Create(configdir + "/config.ini")
@@ -166,7 +166,7 @@ func main() {
 	}
 
 	// Load and filter timecodes
-	codesraw, err := ioutil.ReadFile(config["codefile"])
+	codesraw, err := os.ReadFile(config["codefile"])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error reading timecode file:")
 		fmt.Fprintln(os.Stderr, err)
@@ -199,7 +199,7 @@ func main() {
 	}
 	defer sheetF.Close()
 
-	content, err := ioutil.ReadAll(sheetF)
+	content, err := io.ReadAll(sheetF)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(8)
@@ -343,7 +343,7 @@ func main() {
 		}
 		if !found {
 			codes = append(codes, last.Code)
-			err := ioutil.WriteFile("", []byte(strings.Join(codes, "\n")), 0666)
+			err := os.WriteFile("", []byte(strings.Join(codes, "\n")), 0666)
 			if last == nil {
 				fmt.Fprintln(os.Stderr, "Could not write modified code file, aborted.")
 				fmt.Fprintln(os.Stderr, err)
