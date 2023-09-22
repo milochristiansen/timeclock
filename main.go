@@ -281,7 +281,8 @@ func main() {
 			running[p.Code] += p.Length()
 		}
 
-		err = template.Execute(os.Stdout, ReportData{
+		w := tabwriter.NewWriter(os.Stdout, 2, 4, 1, ' ', 0)
+		err = template.Execute(w, ReportData{
 			Begin:   begin,
 			End:     end,
 			Periods: periods,
@@ -292,6 +293,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			return
 		}
+		w.Flush()
 
 		return
 	}

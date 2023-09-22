@@ -1,5 +1,5 @@
 {{ range .Periods -}}
-{{ printf "%s - %s %5.1fh [%s] %s" (.Begin.Format "2006/01/02 03:04PM") (.End.Format "03:04PM") .Length.Hours .Code .Desc }}
+{{ printf "%s - %s %5.1fh\t[%s]\t%s" (.Begin.Format "2006/01/02 03:04PM") (.End.Format "03:04PM") .Length.Hours .Code .Desc }}
 {{ end -}}
 {{ range $code, $duration := .Totals -}}
 {{ if ne $code "" }}{{ $code := "empty" }}{{ end -}}
