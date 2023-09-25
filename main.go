@@ -64,6 +64,18 @@ type ReportData struct {
 	End     *time.Time
 	Periods []*timelog.Period
 	Totals  map[string]time.Duration
+
+	Weeks []*ReportWeek
+}
+
+type ReportWeek struct {
+	Year   int // 4 digit year
+	Number int // ISO Week number
+
+	Periods []*timelog.Period
+
+	Totals map[string][8]time.Duration // Mon-Sun, plus week total
+	Daily  [8]time.Duration            // Totals for all codes
 }
 
 func main() {
@@ -281,12 +293,36 @@ func main() {
 			running[p.Code] += p.Length()
 		}
 
+		// Now, generate the week data
+		weeks := []*ReportWeek{}
+		var cw *ReportWeek
+		for _, p := range periods {
+			cy, cwn := p.Begin.ISOWeek()
+			if cw == nil || cwn != cw.Number || cy != cw.Year {
+				cw = &ReportWeek{Year: cy, Number: cwn, Totals: map[string][8]time.Duration{}}
+				weeks = append(weeks, cw)
+			}
+
+			cw.Periods = append(cw.Periods, p)
+			d := p.Begin.Weekday() - 1
+			if d < 0 {
+				d = 6
+			}
+			v := cw.Totals[p.Code]
+			v[d] = v[d] + p.Length()
+			v[7] = v[7] + p.Length()
+			cw.Totals[p.Code] = v
+			cw.Daily[d] = cw.Daily[d] + p.Length()
+			cw.Daily[7] = cw.Daily[7] + p.Length()
+		}
+
 		w := tabwriter.NewWriter(os.Stdout, 2, 4, 1, ' ', 0)
 		err = template.Execute(w, ReportData{
 			Begin:   begin,
 			End:     end,
 			Periods: periods,
 			Totals:  running,
+			Weeks:   weeks,
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error executing report template:")

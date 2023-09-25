@@ -1,0 +1,41 @@
+
+{{- range .Weeks }}
+	{{- "\n" }}{{ .Year }} week {{ .Number }}{{ "\n" }}
+
+	{{- /* The individual periods for the current week */}}
+	{{- range .Periods }}
+		{{- printf "%s - %s %5.1fh\t[%s]\t%s\n" (.Begin.Format "2006/01/02 03:04PM") (.End.Format "03:04PM") .Length.Hours .Code .Desc }}
+	{{- else -}}
+		{{ "    " }}No periods in week {{ .Number }}.
+	{{- end }}
+
+	{{- "\n" }}
+
+	{{- /* Totals header line */}}
+	{{- if ne (len .Totals) 0 }}{{ printf "\t M\t T\t W\t T\t F\t S\t S\t\n" }}{{ end }}
+	
+	{{- /* Totals per timecode for the current week */}}
+	{{- range $code, $days := .Totals -}}
+		{{- if ne $code "" }}{{ $code := "empty" }}{{ end -}}
+		{{- $code }}:
+		{{- range $i, $day := $days }}
+			{{- if eq $i 7 }}
+				{{- printf "\t = %2.1f" $day.Hours }}
+			{{- else }}
+				{{- if gt $day.Hours 0.1 }}{{ printf "\t %2.1f" $day.Hours }}{{ else }}{{ print "\t    " }}{{ end }}
+			{{- end }}
+		{{- end }}
+		{{- "\n" }}
+	{{- end }}
+
+	{{- /* Overall totals for the current week */}}
+	{{- range $i, $day := .Daily }}
+		{{- if eq $i 7 }}
+			{{- printf "\t = %2.1f" $day.Hours }}
+		{{- else }}
+			{{- if gt $day.Hours 0.1 }}{{ printf "\t %2.1f" $day.Hours }}{{ else }}{{ print "\t    " }}{{ end }}
+		{{- end }}
+	{{- end }}
+
+	{{- "\n" }}
+{{- end -}}
