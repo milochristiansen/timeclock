@@ -161,6 +161,15 @@ func main() {
 			fmt.Fprintln(file, k+"="+v)
 		}
 		file.Close()
+
+		err = os.MkdirAll(configdir + "/reports", 0777)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error ensuring existence of reports directory:")
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(6)
+		}
+
+		// We did all the stuff we wanted to do, but this whole branch is still an error condition, so...
 		os.Exit(6)
 	} else if err != nil {
 		fmt.Fprintln(os.Stderr, "Error reading config file:")
