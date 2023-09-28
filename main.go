@@ -548,7 +548,9 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 	whole := strings.Join(l, " ")
 
 	// Try to find a time in the description
-	times, err := DateParser.SearchWithLanguage(&dateparser.Configuration{}, "en", whole)
+	times, err := DateParser.SearchWithLanguage(&dateparser.Configuration{
+		CurrentTime: time.Now().Local(),
+	}, "en", whole)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
