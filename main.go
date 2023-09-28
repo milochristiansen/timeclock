@@ -548,12 +548,16 @@ func ParseLine(l []string, codes []string, canprompt bool) (time.Time, string, s
 	whole := strings.Join(l, " ")
 
 	// Try to find a time in the description
-	times, err := DateParser.SearchWithLanguage(&dateparser.Configuration{
-		CurrentTime: time.Now().Local(),
-	}, "en", whole)
+	times, err := DateParser.SearchWithLanguage(&dateparser.Configuration{}, "en", whole)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	// Sometimes the library has a brain fart and still gives time in UTC even if you tell it to give local time, so
+	// just let it give UTC and fix it later.
+	for i := range times {
+		times[i].Date.Time = times[i].Date.Time.In(time.Local)
 	}
 
 	if len(times) == 0 {
