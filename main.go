@@ -41,6 +41,7 @@ import (
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/manifoldco/promptui"
 	"github.com/markusmobius/go-dateparser"
+	"github.com/snabb/isoweek"
 
 	"github.com/milochristiansen/timeclock/timelog"
 )
@@ -69,8 +70,9 @@ type ReportData struct {
 }
 
 type ReportWeek struct {
-	Year   int // 4 digit year
-	Number int // ISO Week number
+	Year     int // 4 digit year
+	Number   int // ISO Week number
+	FirstDay *time.Time // Date of first monday of week.
 
 	Periods []*timelog.Period
 
@@ -308,7 +310,8 @@ func main() {
 		for _, p := range periods {
 			cy, cwn := p.Begin.ISOWeek()
 			if cw == nil || cwn != cw.Number || cy != cw.Year {
-				cw = &ReportWeek{Year: cy, Number: cwn, Totals: map[string][8]time.Duration{}}
+				fd := isoweek.StartTime(p.Begin.Year(), cwn, time.Local)
+				cw = &ReportWeek{Year: cy, Number: cwn, FirstDay: &fd, Totals: map[string][8]time.Duration{}}
 				weeks = append(weeks, cw)
 			}
 

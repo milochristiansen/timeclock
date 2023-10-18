@@ -1,6 +1,6 @@
 
 {{- range .Weeks }}
-	{{- "\n" }}{{ .Year }} week {{ .Number }}{{ "\n" }}
+	{{- "\n" }}{{ .Year }} week {{ .Number }} ({{ (.FirstDay.Format "2006/01/02") }}){{ "\n" }}
 
 	{{- /* The individual periods for the current week */}}
 	{{- range .Periods }}

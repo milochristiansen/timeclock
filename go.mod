@@ -11,6 +11,7 @@ require (
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/markusmobius/go-dateparser v0.0.0-20220211203457-60965b2d2bfb // indirect
 	github.com/milochristiansen/ledger v0.0.0-20220804000643-8da493bd9ad0 // indirect
+	github.com/snabb/isoweek v1.0.3 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 )
