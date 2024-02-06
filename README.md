@@ -121,6 +121,20 @@ This will print the last time event to standard output in the form:
 	2023/07/06 09:36AM [TimeCode] Description Text.
 
 
+### Getting elapsed time since last event
+
+Day dragging on forever? Clocked in at an odd time and want to see how long you have been working without doing any
+math? The `since` command is here for you!
+
+	timeclock since
+
+This will print the last time event, the elapsed time till now, and the current time in the following format:
+
+	2023/07/06 06:18AM [timecode] Description
+	 == 2.5h ==>
+	2023/07/06 08:45AM
+
+
 ### Printing a report
 
 A timeclock isn't any good if you can't print out a report of what you spent time on.

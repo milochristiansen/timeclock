@@ -94,6 +94,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "    Edit last event description, provide new description as an argument.")
 		fmt.Fprintln(os.Stderr, "'status'")
 		fmt.Fprintln(os.Stderr, "    Prints the current last event.")
+		fmt.Fprintln(os.Stderr, "'since'")
+		fmt.Fprintln(os.Stderr, "    Prints the time elapsed since the current last event.")
 		fmt.Fprintln(os.Stderr, "'report'")
 		fmt.Fprintln(os.Stderr, "    Print a report. You must provide a time to set the start point for the")
 		fmt.Fprintln(os.Stderr, "    report. Optionally, you may also provide a time code to limit the report")
@@ -423,6 +425,16 @@ func main() {
 		fmt.Println(last.String())
 		return
 
+	// Handle the current elapsed time report.
+	case os.Args[1] == "since":
+		if last == nil {
+			fmt.Fprintln(os.Stderr, "No events found.")
+			os.Exit(1)
+		}
+
+		fmt.Printf("%s\n == %.1fh ==>\n%s\n", last.String(), time.Now().Sub(last.At).Hours(), time.Now().Format(timelog.TimeFormat))
+		return
+
 	// Test input handling.
 	case os.Args[1] == "test":
 		if len(os.Args) <= 2 {
@@ -463,7 +475,7 @@ func main() {
 		log = append(log, last)
 
 		if old != nil {
-			fmt.Printf("%s\n == %.1fh ==>\n", old.String(), last.At.Sub(old.At).Hours())
+			fmt.Printf("%s\n == %.1fh ==> \n", old.String(), last.At.Sub(old.At).Hours())
 		}
 		fmt.Printf("%s\n", last.String())
 		if c == "" {
