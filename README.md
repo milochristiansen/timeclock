@@ -16,14 +16,12 @@ Config is read from `$XDG_CONFIG_HOME/sctime`, if `$XDG_CONFIG_HOME` is empty or
 Inside this directory there should be a file named `config.ini`. The default contents of this file are as follows:
 
 	logfile="$HOME/sctime.log"
-	codefile="$CONFIG/codes.txt"
 	reportdir="$CONFIG/reports"
 
 `$CONFIG` is a special variable set to the current configuration directory. Otherwise, you may use any environment
 variable you like.
 
 `logfile` is the path to your timelog.
-`codefile` is the path to a file containing all of your timecodes, one per line.
 `reportdir` is the path to a folder containing the report templates.
 
 Any file inside `reportdir` matching `*.tmpl` will be read as a report template. Reports defined in `reportdir`

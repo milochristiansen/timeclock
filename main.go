@@ -30,7 +30,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -148,7 +147,6 @@ func main() {
 	// Load the config file
 	config := map[string]string{
 		"logfile":    "$HOME/sctime.log",
-		"codefile":   "$CONFIG/codes.txt",
 		"reportsdir": "$CONFIG/reports",
 	}
 
@@ -192,30 +190,6 @@ func main() {
 		})
 	}
 
-	// Load and filter timecodes
-	codesraw, err := os.ReadFile(config["codefile"])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error reading timecode file:")
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(7)
-	}
-	codes := strings.Split(string(codesraw), "\n")
-	for i := range codes {
-		codes[i] = strings.TrimSpace(codes[i])
-	}
-	codes = slices.DeleteFunc(codes, func(e string) bool {
-		if e == "" {
-			return true
-		}
-		if strings.HasPrefix(e, "#") || strings.HasPrefix(e, "//") || strings.HasPrefix(e, ";") {
-			return true
-		}
-		return false
-	})
-
-	// Create a timecode tree for hierarchical filtering.
-	codetree := timelog.GenerateTimecodeTree(codes)
-
 	// Now on to our regularly scheduled program
 
 	// Open the timesheet
@@ -238,6 +212,12 @@ func main() {
 		os.Exit(8)
 	}
 	log.Sort()
+
+	// Load the timecodes from the timelog.
+	codes := log.Codes()
+
+	// Create a timecode tree for hierarchical filtering.
+	codetree := timelog.GenerateTimecodeTree(codes)
 
 	// Reporting
 	if os.Args[1] == "report" {
@@ -382,24 +362,6 @@ func main() {
 		}
 
 		last.Code = strings.Join(os.Args[2:], " ")
-
-		// Check if code is new, and if it is add it to the timecode file.
-		found := false
-		for _, v := range codes {
-			if v == last.Code {
-				found = true
-				break
-			}
-		}
-		if !found {
-			codes = append(codes, last.Code)
-			err := os.WriteFile("", []byte(strings.Join(codes, "\n")), 0666)
-			if last == nil {
-				fmt.Fprintln(os.Stderr, "Could not write modified code file, aborted.")
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-		}
 
 		fmt.Printf("Changed last event time code to: %v\n", last.Code)
 
